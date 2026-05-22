@@ -2,267 +2,150 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Jimeng Watermark Extractor & Process Simulator</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Link Extractor & Downloader</title>
+
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Extractor">
+    
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+
     <style>
+        /* Modern mobile-first stylesheet UI layout */
+        * {
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            background: #f5f5f7;
-            color: #1d1d1f;
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+            background-color: #f2f2f7; /* Matches iOS system background appearance */
             margin: 0;
             padding: 20px;
             display: flex;
-            flex-direction: column;
+            justify-content: center;
             align-items: center;
+            min-height: 100vh;
         }
         .container {
-            max-width: 800px;
-            width: 100%;
-            background: #ffffff;
+            background-color: #ffffff;
             padding: 24px;
-            border-radius: 12px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+            border-radius: 16px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+            width: 100%;
+            max-width: 400px;
         }
-        .canvas-container {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 16px;
-            margin-top: 20px;
-            justify-content: center;
-        }
-        canvas {
-            max-width: 100%;
-            border: 1px solid #d2d2d7;
-            border-radius: 8px;
-            background: #e5e5ea;
-        }
-        .box {
-            flex: 1;
-            min-width: 300px;
+        h2 {
+            color: #1c1c1e;
+            margin: 0 0 8px 0;
+            font-size: 22px;
+            font-weight: 700;
             text-align: center;
         }
-        input[type="file"] {
-            margin: 15px 0;
+        p {
+            color: #8e8e93;
+            font-size: 14px;
+            text-align: center;
+            margin: 0 0 20px 0;
+        }
+        textarea {
+            width: 100%;
+            height: 130px;
+            padding: 14px;
+            border: 1px solid #d1d1d6;
+            border-radius: 12px;
+            resize: none;
+            font-size: 16px; /* 16px font size effectively prevents iOS auto-zoom on selection focus */
+            background-color: #f2f2f7;
+            color: #1c1c1e;
+            font-family: inherit;
+            margin-bottom: 20px;
+        }
+        textarea:focus {
+            outline: none;
+            border-color: #007aff; /* Apple Blue accent color highlighting */
+            background-color: #ffffff;
         }
         button {
-            background: #0071e3;
+            width: 100%;
+            background-color: #007aff;
             color: white;
+            padding: 16px;
             border: none;
-            padding: 10px 20px;
+            border-radius: 12px;
             font-size: 16px;
-            border-radius: 8px;
+            font-weight: 600;
             cursor: pointer;
+            transition: background-color 0.2s, transform 0.1s;
         }
-        button:hover { background: #0077ed; }
-        #log {
-            background: #1d1d1f;
-            color: #30d158;
-            padding: 12px;
-            border-radius: 6px;
-            font-family: monospace;
-            font-size: 13px;
-            margin-top: 15px;
-            text-align: left;
-            max-height: 150px;
-            overflow-y: auto;
+        button:active {
+            background-color: #0056b3;
+            transform: scale(0.99);
+        }
+        .status {
+            margin-top: 16px;
+            font-size: 14px;
+            font-weight: 600;
+            text-align: center;
+            min-height: 20px;
         }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h2>Jimeng Algorithmic Watermark Extractor</h2>
-    <p>Upload a Jimeng image to run the two-pass detection and exemplar fill algorithm.</p>
+    <h2>Extractor Tool</h2>
+    <p>Paste the raw app message below</p>
     
-    <input type="file" id="imageLoader" accept="image/*"><br>
-    <button id="processBtn" disabled>Scan & Remove Watermark</button>
+    <textarea id="rawInput" placeholder="Paste full text here..."></textarea>
     
-    <div id="log">Console: Awaiting image upload...</div>
-
-    <div class="canvas-container">
-        <div class="box">
-            <h4>1. Detection Scan (Bounding Boxes)</h4>
-            <canvas id="canvasSource"></canvas>
-        </div>
-        <div class="box">
-            <h4>2. Output (Exemplar Content-Fill)</h4>
-            <canvas id="canvasOutput"></canvas>
-        </div>
-    </div>
+    <button onclick="processAndRedirect()">Extract, Copy & Open</button>
+    
+    <div id="statusMessage" class="status"></div>
 </div>
 
 <script>
-const imageLoader = document.getElementById('imageLoader');
-const processBtn = document.getElementById('processBtn');
-const canvasSource = document.getElementById('canvasSource');
-const canvasOutput = document.getElementById('canvasOutput');
-const ctxSrc = canvasSource.getContext('2d');
-const ctxOut = canvasOutput.getContext('2d');
-const logDiv = document.getElementById('log');
-
-let imgElement = new Image();
-
-function log(msg) {
-    logDiv.innerHTML += "<br>" + msg;
-    logDiv.scrollTop = logDiv.scrollHeight;
-}
-
-imageLoader.addEventListener('change', (e) => {
-    const reader = new FileReader();
-    reader.onload = function(event){
-        imgElement.onload = function(){
-            canvasSource.width = imgElement.width;
-            canvasSource.height = imgElement.height;
-            canvasOutput.width = imgElement.width;
-            canvasOutput.height = imgElement.height;
+function processAndRedirect() {
+    const rawText = document.getElementById('rawInput').value;
+    const statusDiv = document.getElementById('statusMessage');
+    
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    const match = rawText.match(urlRegex);
+    
+    if (match && match[0]) {
+        const extractedUrl = match[0];
+        
+        try {
+            // Fix: Create a hidden text element to guarantee fallback support on iOS
+            const tempTextArea = document.createElement("textarea");
+            tempTextArea.value = extractedUrl;
+            tempTextArea.style.position = "absolute";
+            tempTextArea.style.left = "-9999px";
+            document.body.appendChild(tempTextArea);
+            tempTextArea.select();
+            tempTextArea.setSelectionRange(0, 99999); // Ensures complete text selection coverage on mobile devices
             
-            ctxSrc.drawImage(imgElement, 0, 0);
-            ctxOut.drawImage(imgElement, 0, 0);
-            processBtn.disabled = false;
-            logDiv.innerHTML = "Console: Image loaded successfully (" + imgElement.width + "x" + imgElement.height + "). Ready to process.";
-        }
-        imgElement.src = event.target.result;
-    }
-    reader.readAsDataURL(e.target.files[0]);
-});
-
-processBtn.addEventListener('click', () => {
-    const W = imgElement.width;
-    const H = imgElement.height;
-    
-    // Get raw pixel array data from the source image
-    const imgData = ctxSrc.getImageData(0, 0, W, H);
-    const pixels = imgData.data;
-
-    log("Starting detection passes...");
-
-    // -------------------------------------------------------------
-    // PASS 1: Top-Left Region Scan (18% Width x 13% Height)
-    // -------------------------------------------------------------
-    let tlBox = { minX: W, minY: H, maxX: 0, maxY: 0, found: false };
-    const tlMaxX = Math.floor(W * 0.18);
-    const tlMaxY = Math.floor(H * 0.13);
-
-    for (let y = 0; y < tlMaxY; y++) {
-        for (let x = 0; x < tlMaxX; x++) {
-            const idx = (y * W + x) * 4;
-            const r = pixels[idx];
-            const g = pixels[idx+1];
-            const b = pixels[idx+2];
-
-            // Rule 1: Muted-gray luminance band (85-130)
-            const luminance = 0.299 * r + 0.587 * g + 0.114 * b;
+            // Native fallback wrapper system triggers copying behavior instantaneously
+            document.execCommand("copy");
+            document.body.removeChild(tempTextArea);
             
-            if (luminance >= 85 && luminance <= 130) {
-                // Rule 2: Small RGB spread (Gray tone matching R ≈ G ≈ B)
-                const maxChannel = Math.max(r, g, b);
-                const minChannel = Math.min(r, g, b);
-                if ((maxChannel - minChannel) <= 15) { 
-                    if (x < tlBox.minX) tlBox.minX = x;
-                    if (y < tlBox.minY) tlBox.minY = y;
-                    if (x > tlBox.maxX) tlBox.maxX = x;
-                    if (y > tlBox.maxY) tlBox.maxY = y;
-                    tlBox.found = true;
-                }
-            }
+            statusDiv.style.color = '#34c759';
+            statusDiv.innerText = "✓ URL copied! Opening downloader...";
+            
+            document.getElementById('rawInput').value = '';
+            
+            // Fix: Triggers the new window redirection sequence synchronously with the user action context
+            window.open("https://savevideoraw.com/jimeng", "_blank");
+            
+        } catch (err) {
+            statusDiv.style.color = '#ff3b30';
+            statusDiv.innerText = "Copy process execution failed.";
         }
-    }
-
-    // -------------------------------------------------------------
-    // PASS 2: Bottom-Right Region Scan (45% Width x 17% Height)
-    // -------------------------------------------------------------
-    let brBox = { minX: W, minY: H, maxX: 0, maxY: 0, found: false };
-    const brMinX = Math.floor(W * (1 - 0.45));
-    const brMinY = Math.floor(H * (1 - 0.17));
-
-    for (let y = brMinY; y < H; y++) {
-        for (let x = brMinX; x < W; x++) {
-            const idx = (y * W + x) * 4;
-            const r = pixels[idx];
-            const g = pixels[idx+1];
-            const b = pixels[idx+2];
-
-            // Rule: White-ish colors with all RGB channels above 200
-            if (r > 200 && g > 200 && b > 200) {
-                if (x < brBox.minX) brBox.minX = x;
-                if (y < brBox.minY) brBox.minY = y;
-                if (x > brBox.maxX) brBox.maxX = x;
-                if (y > brBox.maxY) brBox.maxY = y;
-                brBox.found = true;
-            }
-        }
-    }
-
-    // Add 60px padding context window buffer as described in document
-    const padding = 60;
-
-    // Draw visual boxes on the primary diagnostic view
-    ctxSrc.drawImage(imgElement, 0, 0); // reset
-    ctxOut.drawImage(imgElement, 0, 0); // reset
-
-    if (tlBox.found) {
-        tlBox.minX = Math.max(0, tlBox.minX - padding);
-        tlBox.minY = Math.max(0, tlBox.minY - padding);
-        tlBox.maxX = Math.min(W, tlBox.maxX + padding);
-        tlBox.maxY = Math.min(H, tlBox.maxY + padding);
         
-        ctxSrc.strokeStyle = "#ff3b30";
-        ctxSrc.lineWidth = 3;
-        ctxSrc.strokeRect(tlBox.minX, tlBox.minY, tlBox.maxX - tlBox.minX, tlBox.maxY - tlBox.minY);
-        log(`✓ Top-Left Watermark localized: [${tlBox.minX}, ${tlBox.minY}] to [${tlBox.maxX}, ${tlBox.maxY}]`);
-        
-        exemplarFill(tlBox, ctxOut, W, H);
     } else {
-        log("i Top-Left Watermark zone clean / not discovered.");
+        statusDiv.style.color = '#ff3b30';
+        statusDiv.innerText = "❌ Valid link not detected.";
     }
-
-    if (brBox.found) {
-        brBox.minX = Math.max(0, brBox.minX - padding);
-        brBox.minY = Math.max(0, brBox.minY - padding);
-        brBox.maxX = Math.min(W, brBox.maxX + padding);
-        brBox.maxY = Math.min(H, brBox.maxY + padding);
-        
-        ctxSrc.strokeStyle = "#ff9500";
-        ctxSrc.lineWidth = 3;
-        ctxSrc.strokeRect(brBox.minX, brBox.minY, brBox.maxX - brBox.minX, brBox.maxY - brBox.minY);
-        log(`✓ Bottom-Right Watermark localized: [${brBox.minX}, ${brBox.minY}] to [${brBox.maxX}, ${brBox.maxY}]`);
-        
-        exemplarFill(brBox, ctxOut, W, H);
-    } else {
-        log("i Bottom-Right Watermark zone clean / not discovered.");
-    }
-    
-    log("Processing Complete.");
-});
-
-// A localized mobile-optimized PatchMatch exemplar fill approximation
-// It samples surrounding pixels outside the bounding box boundary to reconstruct the region
-function exemplarFill(box, targetCtx, imgW, imgH) {
-    const boxW = box.maxX - box.minX;
-    const boxH = box.maxY - box.minY;
-    
-    if (boxW <= 0 || boxH <= 0) return;
-
-    // Fetch bounding context configuration
-    const patchData = targetCtx.getImageData(box.minX, box.minY, boxW, boxH);
-    
-    // Simple vertical/horizontal spatial texture cloning interpolation fallback
-    // Grabs surrounding rows/columns right outside the detection window boundary to stitch the gap
-    for (let x = 0; x < boxW; x++) {
-        // Sample baseline context points adjacent to target borders
-        const sampleY = (box.minY > 10) ? box.minY - 4 : box.maxY + 4;
-        const sourcePixel = targetCtx.getImageData(box.minX + x, sampleY, 1, 1).data;
-        
-        for (let y = 0; y < boxH; y++) {
-            const pixelIndex = (y * boxW + x) * 4;
-            patchData.data[pixelIndex]     = sourcePixel[0]; // R
-            patchData.data[pixelIndex + 1] = sourcePixel[1]; // G
-            patchData.data[pixelIndex + 2] = sourcePixel[2]; // B
-            patchData.data[pixelIndex + 3] = 255;            // Alpha
-        }
-    }
-    // Write composition data modifications seamlessly back onto output projection field
-    targetCtx.putImageData(patchData, box.minX, box.minY);
 }
 </script>
 
