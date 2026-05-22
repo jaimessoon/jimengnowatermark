@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JISO Link Extractor & Downloader</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: #f4f7f6;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+        .container {
+            background-color: #ffffff;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+            width: 100%;
+            max-width: 500px;
+        }
+        h2 {
+            color: #333;
+            margin-top: 0;
+            font-size: 24px;
+        }
+        textarea {
+            width: 100%;
+            height: 120px;
+            padding: 12px;
+            box-sizing: border-box;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            resize: none;
+            font-size: 14px;
+            margin-bottom: 15px;
+        }
+        textarea:focus {
+            outline: none;
+            border-color: #4f46e5;
+        }
+        button {
+            width: 100%;
+            background-color: #4f46e5;
+            color: white;
+            padding: 14px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        button:hover {
+            background-color: #4338ca;
+        }
+        .status {
+            margin-top: 15px;
+            font-size: 14px;
+            color: #10b981;
+            font-weight: 500;
+            text-align: center;
+            min-height: 20px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>JISO Extractor Tool</h2>
+    <p style="color: #666; font-size: 14px; margin-bottom: 20px;">Paste the raw video message text below:</p>
+    
+    <textarea id="rawInput" placeholder="Paste text here (e.g., 快来看 Cheryl Tan... https://jimeng...)"></textarea>
+    
+    <button onclick="processAndRedirect()">Extract URL & Open Downloader</button>
+    
+    <div id="statusMessage" class="status"></div>
+</div>
+
+<script>
+function processAndRedirect() {
+    const rawText = document.getElementById('rawInput').value;
+    const statusDiv = document.getElementById('statusMessage');
+    
+    // Regular expression to look for a URL starting with http/https
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    const match = rawText.match(urlRegex);
+    
+    if (match && match[0]) {
+        const extractedUrl = match[0];
+        
+        // Copy the URL to the user's clipboard automatically
+        navigator.clipboard.writeText(extractedUrl).then(() => {
+            statusDiv.style.color = '#10b981';
+            statusDiv.innerText = "✓ URL copied to clipboard! Opening downloader tab...";
+            
+            // Clear input for next run
+            document.getElementById('rawInput').value = '';
+            
+            // Redirect/Open SaveVideoRaw in a new tab after a brief delay
+            setTimeout(() => {
+                window.open("https://savevideoraw.com/jimeng", "_blank");
+                statusDiv.innerText = "";
+            }, 1200);
+        }).catch(err => {
+            statusDiv.style.color = '#ef4444';
+            statusDiv.innerText = "Clipboard copy failed. Please copy manually.";
+        });
+        
+    } else {
+        statusDiv.style.color = '#ef4444';
+        statusDiv.innerText = "❌ No link found in the text. Try again.";
+    }
+}
+</script>
+
+</body>
+</html>
