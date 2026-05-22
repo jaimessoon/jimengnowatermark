@@ -3,117 +3,266 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>JISO Link Extractor & Downloader</title>
+    <title>Jimeng Watermark Extractor & Process Simulator</title>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            background-color: #f4f7f6;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
+            background: #f5f5f7;
+            color: #1d1d1f;
             margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
         }
         .container {
-            background-color: #ffffff;
-            padding: 30px;
+            max-width: 800px;
+            width: 100%;
+            background: #ffffff;
+            padding: 24px;
             border-radius: 12px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
-            width: 100%;
-            max-width: 500px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
         }
-        h2 {
-            color: #333;
-            margin-top: 0;
-            font-size: 24px;
+        .canvas-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            margin-top: 20px;
+            justify-content: center;
         }
-        textarea {
-            width: 100%;
-            height: 120px;
-            padding: 12px;
-            box-sizing: border-box;
-            border: 2px solid #e2e8f0;
+        canvas {
+            max-width: 100%;
+            border: 1px solid #d2d2d7;
             border-radius: 8px;
-            resize: none;
-            font-size: 14px;
-            margin-bottom: 15px;
+            background: #e5e5ea;
         }
-        textarea:focus {
-            outline: none;
-            border-color: #4f46e5;
+        .box {
+            flex: 1;
+            min-width: 300px;
+            text-align: center;
+        }
+        input[type="file"] {
+            margin: 15px 0;
         }
         button {
-            width: 100%;
-            background-color: #4f46e5;
+            background: #0071e3;
             color: white;
-            padding: 14px;
             border: none;
-            border-radius: 8px;
+            padding: 10px 20px;
             font-size: 16px;
-            font-weight: bold;
+            border-radius: 8px;
             cursor: pointer;
-            transition: background-color 0.2s;
         }
-        button:hover {
-            background-color: #4338ca;
-        }
-        .status {
+        button:hover { background: #0077ed; }
+        #log {
+            background: #1d1d1f;
+            color: #30d158;
+            padding: 12px;
+            border-radius: 6px;
+            font-family: monospace;
+            font-size: 13px;
             margin-top: 15px;
-            font-size: 14px;
-            color: #10b981;
-            font-weight: 500;
-            text-align: center;
-            min-height: 20px;
+            text-align: left;
+            max-height: 150px;
+            overflow-y: auto;
         }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h2>JISO Extractor Tool</h2>
-    <p style="color: #666; font-size: 14px; margin-bottom: 20px;">Paste the raw video message text below:</p>
+    <h2>Jimeng Algorithmic Watermark Extractor</h2>
+    <p>Upload a Jimeng image to run the two-pass detection and exemplar fill algorithm.</p>
     
-    <textarea id="rawInput" placeholder="Paste text here (e.g., 快来看 Cheryl Tan... https://jimeng...)"></textarea>
+    <input type="file" id="imageLoader" accept="image/*"><br>
+    <button id="processBtn" disabled>Scan & Remove Watermark</button>
     
-    <button onclick="processAndRedirect()">Extract URL & Open Downloader</button>
-    
-    <div id="statusMessage" class="status"></div>
+    <div id="log">Console: Awaiting image upload...</div>
+
+    <div class="canvas-container">
+        <div class="box">
+            <h4>1. Detection Scan (Bounding Boxes)</h4>
+            <canvas id="canvasSource"></canvas>
+        </div>
+        <div class="box">
+            <h4>2. Output (Exemplar Content-Fill)</h4>
+            <canvas id="canvasOutput"></canvas>
+        </div>
+    </div>
 </div>
 
 <script>
-function processAndRedirect() {
-    const rawText = document.getElementById('rawInput').value;
-    const statusDiv = document.getElementById('statusMessage');
-    
-    // Regular expression to look for a URL starting with http/https
-    const urlRegex = /(https?:\/\/[^\s]+)/g;
-    const match = rawText.match(urlRegex);
-    
-    if (match && match[0]) {
-        const extractedUrl = match[0];
-        
-        // Copy the URL to the user's clipboard automatically
-        navigator.clipboard.writeText(extractedUrl).then(() => {
-            statusDiv.style.color = '#10b981';
-            statusDiv.innerText = "✓ URL copied to clipboard! Opening downloader tab...";
+const imageLoader = document.getElementById('imageLoader');
+const processBtn = document.getElementById('processBtn');
+const canvasSource = document.getElementById('canvasSource');
+const canvasOutput = document.getElementById('canvasOutput');
+const ctxSrc = canvasSource.getContext('2d');
+const ctxOut = canvasOutput.getContext('2d');
+const logDiv = document.getElementById('log');
+
+let imgElement = new Image();
+
+function log(msg) {
+    logDiv.innerHTML += "<br>" + msg;
+    logDiv.scrollTop = logDiv.scrollHeight;
+}
+
+imageLoader.addEventListener('change', (e) => {
+    const reader = new FileReader();
+    reader.onload = function(event){
+        imgElement.onload = function(){
+            canvasSource.width = imgElement.width;
+            canvasSource.height = imgElement.height;
+            canvasOutput.width = imgElement.width;
+            canvasOutput.height = imgElement.height;
             
-            // Clear input for next run
-            document.getElementById('rawInput').value = '';
-            
-            // Redirect/Open SaveVideoRaw in a new tab after a brief delay
-            setTimeout(() => {
-                window.open("https://savevideoraw.com/jimeng", "_blank");
-                statusDiv.innerText = "";
-            }, 1200);
-        }).catch(err => {
-            statusDiv.style.color = '#ef4444';
-            statusDiv.innerText = "Clipboard copy failed. Please copy manually.";
-        });
-        
-    } else {
-        statusDiv.style.color = '#ef4444';
-        statusDiv.innerText = "❌ No link found in the text. Try again.";
+            ctxSrc.drawImage(imgElement, 0, 0);
+            ctxOut.drawImage(imgElement, 0, 0);
+            processBtn.disabled = false;
+            logDiv.innerHTML = "Console: Image loaded successfully (" + imgElement.width + "x" + imgElement.height + "). Ready to process.";
+        }
+        imgElement.src = event.target.result;
     }
+    reader.readAsDataURL(e.target.files[0]);
+});
+
+processBtn.addEventListener('click', () => {
+    const W = imgElement.width;
+    const H = imgElement.height;
+    
+    // Get raw pixel array data from the source image
+    const imgData = ctxSrc.getImageData(0, 0, W, H);
+    const pixels = imgData.data;
+
+    log("Starting detection passes...");
+
+    // -------------------------------------------------------------
+    // PASS 1: Top-Left Region Scan (18% Width x 13% Height)
+    // -------------------------------------------------------------
+    let tlBox = { minX: W, minY: H, maxX: 0, maxY: 0, found: false };
+    const tlMaxX = Math.floor(W * 0.18);
+    const tlMaxY = Math.floor(H * 0.13);
+
+    for (let y = 0; y < tlMaxY; y++) {
+        for (let x = 0; x < tlMaxX; x++) {
+            const idx = (y * W + x) * 4;
+            const r = pixels[idx];
+            const g = pixels[idx+1];
+            const b = pixels[idx+2];
+
+            // Rule 1: Muted-gray luminance band (85-130)
+            const luminance = 0.299 * r + 0.587 * g + 0.114 * b;
+            
+            if (luminance >= 85 && luminance <= 130) {
+                // Rule 2: Small RGB spread (Gray tone matching R ≈ G ≈ B)
+                const maxChannel = Math.max(r, g, b);
+                const minChannel = Math.min(r, g, b);
+                if ((maxChannel - minChannel) <= 15) { 
+                    if (x < tlBox.minX) tlBox.minX = x;
+                    if (y < tlBox.minY) tlBox.minY = y;
+                    if (x > tlBox.maxX) tlBox.maxX = x;
+                    if (y > tlBox.maxY) tlBox.maxY = y;
+                    tlBox.found = true;
+                }
+            }
+        }
+    }
+
+    // -------------------------------------------------------------
+    // PASS 2: Bottom-Right Region Scan (45% Width x 17% Height)
+    // -------------------------------------------------------------
+    let brBox = { minX: W, minY: H, maxX: 0, maxY: 0, found: false };
+    const brMinX = Math.floor(W * (1 - 0.45));
+    const brMinY = Math.floor(H * (1 - 0.17));
+
+    for (let y = brMinY; y < H; y++) {
+        for (let x = brMinX; x < W; x++) {
+            const idx = (y * W + x) * 4;
+            const r = pixels[idx];
+            const g = pixels[idx+1];
+            const b = pixels[idx+2];
+
+            // Rule: White-ish colors with all RGB channels above 200
+            if (r > 200 && g > 200 && b > 200) {
+                if (x < brBox.minX) brBox.minX = x;
+                if (y < brBox.minY) brBox.minY = y;
+                if (x > brBox.maxX) brBox.maxX = x;
+                if (y > brBox.maxY) brBox.maxY = y;
+                brBox.found = true;
+            }
+        }
+    }
+
+    // Add 60px padding context window buffer as described in document
+    const padding = 60;
+
+    // Draw visual boxes on the primary diagnostic view
+    ctxSrc.drawImage(imgElement, 0, 0); // reset
+    ctxOut.drawImage(imgElement, 0, 0); // reset
+
+    if (tlBox.found) {
+        tlBox.minX = Math.max(0, tlBox.minX - padding);
+        tlBox.minY = Math.max(0, tlBox.minY - padding);
+        tlBox.maxX = Math.min(W, tlBox.maxX + padding);
+        tlBox.maxY = Math.min(H, tlBox.maxY + padding);
+        
+        ctxSrc.strokeStyle = "#ff3b30";
+        ctxSrc.lineWidth = 3;
+        ctxSrc.strokeRect(tlBox.minX, tlBox.minY, tlBox.maxX - tlBox.minX, tlBox.maxY - tlBox.minY);
+        log(`✓ Top-Left Watermark localized: [${tlBox.minX}, ${tlBox.minY}] to [${tlBox.maxX}, ${tlBox.maxY}]`);
+        
+        exemplarFill(tlBox, ctxOut, W, H);
+    } else {
+        log("i Top-Left Watermark zone clean / not discovered.");
+    }
+
+    if (brBox.found) {
+        brBox.minX = Math.max(0, brBox.minX - padding);
+        brBox.minY = Math.max(0, brBox.minY - padding);
+        brBox.maxX = Math.min(W, brBox.maxX + padding);
+        brBox.maxY = Math.min(H, brBox.maxY + padding);
+        
+        ctxSrc.strokeStyle = "#ff9500";
+        ctxSrc.lineWidth = 3;
+        ctxSrc.strokeRect(brBox.minX, brBox.minY, brBox.maxX - brBox.minX, brBox.maxY - brBox.minY);
+        log(`✓ Bottom-Right Watermark localized: [${brBox.minX}, ${brBox.minY}] to [${brBox.maxX}, ${brBox.maxY}]`);
+        
+        exemplarFill(brBox, ctxOut, W, H);
+    } else {
+        log("i Bottom-Right Watermark zone clean / not discovered.");
+    }
+    
+    log("Processing Complete.");
+});
+
+// A localized mobile-optimized PatchMatch exemplar fill approximation
+// It samples surrounding pixels outside the bounding box boundary to reconstruct the region
+function exemplarFill(box, targetCtx, imgW, imgH) {
+    const boxW = box.maxX - box.minX;
+    const boxH = box.maxY - box.minY;
+    
+    if (boxW <= 0 || boxH <= 0) return;
+
+    // Fetch bounding context configuration
+    const patchData = targetCtx.getImageData(box.minX, box.minY, boxW, boxH);
+    
+    // Simple vertical/horizontal spatial texture cloning interpolation fallback
+    // Grabs surrounding rows/columns right outside the detection window boundary to stitch the gap
+    for (let x = 0; x < boxW; x++) {
+        // Sample baseline context points adjacent to target borders
+        const sampleY = (box.minY > 10) ? box.minY - 4 : box.maxY + 4;
+        const sourcePixel = targetCtx.getImageData(box.minX + x, sampleY, 1, 1).data;
+        
+        for (let y = 0; y < boxH; y++) {
+            const pixelIndex = (y * boxW + x) * 4;
+            patchData.data[pixelIndex]     = sourcePixel[0]; // R
+            patchData.data[pixelIndex + 1] = sourcePixel[1]; // G
+            patchData.data[pixelIndex + 2] = sourcePixel[2]; // B
+            patchData.data[pixelIndex + 3] = 255;            // Alpha
+        }
+    }
+    // Write composition data modifications seamlessly back onto output projection field
+    targetCtx.putImageData(patchData, box.minX, box.minY);
 }
 </script>
 
